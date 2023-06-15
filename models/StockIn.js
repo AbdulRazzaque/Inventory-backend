@@ -2,14 +2,17 @@ const mongoose = require("mongoose")
 
 const stockInScheme = new mongoose.Schema({
     name:{type:String,default:""},
+    // companyName:{type:String,default:""},
+    companyName:[],
     productType:{type:String,default:""},
     docNo:{type:Number,default:1},
     supplierDocNo:{type:String,default:""},
     supplier:{type:mongoose.Types.ObjectId,ref:"Supplier"},
     quantity:{type:Number,default:0, required:true},
-    price:{type:Number,default:0},
+    price:{type:Number},
     prevQuantity:{type:Number,default:0},
     expiry:{type:Date},
+    unit:{type:String,default:""}
 },{timestamps:true})
 
 const StockIn = new mongoose.model("StockIn",stockInScheme)

@@ -5,7 +5,11 @@ const jwt = require("jsonwebtoken")
 
 class UserController{
     async getUser (req,res){
-        res.send("home routre user")
+        User.find({})
+        .then(response=>{
+            res.status(200).send({msg:"success",result:response})
+        })
+        
     }
 
     async createUser(req,res){
@@ -50,7 +54,7 @@ class UserController{
                     if(hashPassword){
                         //log in success
                         var token = jwt.sign({ userName: req.body.userName,_id:response._id,role:response.role }, process.env.TOKEN);
-                        res.status(201).send({msg:"success",result:token})
+                        res.status(201).send({msg:"success",result:{token,role:response.role,userInfo:response}})
                     }else{
                         //log in failed
                         res.status(400).send("Incorrect Password")
@@ -60,6 +64,23 @@ class UserController{
                 }
             })
             
+        }
+    }
+
+    async deleteUsers(req,res){
+        let {array} = req.body;
+        if(!req.body.array){
+            res.status(400).send("Data Missing")
+        }else{
+            array = array.map(item=>mongoose.Types.ObjectId(item))
+            User.deleteMany({_id: { $in: array}})
+            .then(response=>{
+                if(response.deletedCount===1){
+                    res.status(200).send({msg:"success",result:"Deleted"})
+                }else{
+                    res.status(400).send("Not deleted")
+                }
+            })
         }
     }
 }

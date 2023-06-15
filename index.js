@@ -3,8 +3,9 @@ const bodyParser = require('body-parser')
 const cors = require('cors')
 const bcrypt = require('bcryptjs')
 const {PDFNet} = require("@pdftron/pdfnet-node")
-
+const PORT = process.env.PORT || 3002
 const mongoose = require('mongoose')
+
 require('dotenv').config()
 
 const path = require('path');
@@ -20,6 +21,9 @@ mongoose.connect(process.env.MONGODB)
 .catch(err=>{
     console.log(err)
 })
+// const bodyParser = require('body-parser');
+
+
 
 const userRouter = require('./router/userRouter')
 const productRouter = require('./router/productRouter')
@@ -121,6 +125,6 @@ app.use('/api/stock',stockRouter)
 //     PDFNetEndpoint(main, outputPath, res);
 //   });
 
-app.listen(3002,()=>{
+app.listen(PORT,()=>{
     console.log("server started on 3002")
 })

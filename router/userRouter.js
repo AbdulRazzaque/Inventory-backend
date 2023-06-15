@@ -5,6 +5,7 @@ const isAdminAuth = require("../middlewares/isAdminAuth")
 
 router.get('/',userController.getUser)
 router.post('/createUser',isAdminAuth,userController.createUser)
+router.post('/deleteUsers',isAdminAuth,userController.deleteUsers)
 router.post('/loginUser',userController.loginUser)
 
 module.exports=router;

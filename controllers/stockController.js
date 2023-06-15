@@ -13,28 +13,33 @@ class ProductController{
     }
 
     async getAllStocks(req,res){
-        Stock.find({})
+        Stock.find({},{stockIn:0,stockOut:0}).populate("product").sort({name:1})
         .then(response=>{
             res.status(200).send({msg:"success",result:response})
         })
-    }
+    } 
 
     async stockIn(req,res){
-        const {productType,productName,productId,supplierId,supplierDocNo,quantity,price,expiry,docNo} = req.body;
-        if(!productType||!productName||!productId||!supplierId||!supplierDocNo||!quantity||!price||!expiry||!docNo){
+        let {productType,productName,companyName,productId,supplierId,supplierDocNo,quantity,price,expiry,docNo,unit} = req.body;
+        if(!productType||!productName||!companyName||!productId||!supplierId||!supplierDocNo||!quantity||!price||!expiry||!docNo||!unit){
             res.status(400).send("Bad Request")
         }else{
+            quantity = parseInt(quantity)
+            // price = parseInt(price)
+            price = parseFloat(price)
             Stock.findOne({name:req.body.productName})
             .then(async response=>{
                 const newStockIn = new StockIn({
                     name:productName,
+                    companyName,
                     productType,
                     docNo,
                     supplierDocNo,
                     supplier:supplierId,
                     quantity,
                     price,
-                    expiry
+                    expiry,
+                    unit
                 })
                 const stockInResponse = await newStockIn.save()
                 if(response){
@@ -43,7 +48,7 @@ class ProductController{
                     .then(async stockUpdateResponse=>{
                         console.log(stockUpdateResponse)
                         await StockIn.updateOne({_id:stockInResponse._id},{$set:{prevQuantity:stockUpdateResponse.quantity}})
-                        res.status(200).send({msg:'success',result:'Stock In Successfull'})
+                        res.status(200).send({msg:'success',result:stockInResponse})
                     })
                 }else{
                     //product doesn't exist stock in and create
@@ -55,7 +60,7 @@ class ProductController{
                         })
                         newStock.save()
                         .then(newStockResponse=>{
-                            res.status(200).send({msg:'success',result:'Stock In Successfull'})
+                            res.status(200).send({msg:'success',result:stockInResponse})
                         })
                 }
             })
@@ -63,70 +68,560 @@ class ProductController{
         
     }
 
-    async stockOut(req,res){
-        const {unit,productName,productId,docNo,locationId,quantity,stockId,date,trainerName,doctorName}=req.body;
-        if(!unit || !productName||!productId||!docNo||!locationId||!quantity||!stockId||!date||!trainerName||!doctorName){
+    async stockInUpdateQuantity(req,res){ //6450eb9087560398aa7377b9 //"Novacoc"
+        // if(!req.body.id || req.body.quantity===null || !req.body.productName || !req.body.originalQuantity){ //originalquantity is the original quantity of stock In and quantity is the latest modiefied qunatity
+        // res.status(400).send("Bad Request")
+        // }else{
+            const {id,quantity,productName,originalQuantity}=req.body;
+            StockIn.updateOne({_id:mongoose.Types.ObjectId(req.body.id)},{quantity:parseInt(req.body.quantity),
+                prevQuantity:parseInt(req.body.originalQuantity)})
+            .then(response=>{
+                    let finalquantity = parseInt(req.body.quantity) - parseInt(req.body.originalQuantity)
+                    Stock.updateOne({name:req.body.productName},{$inc:{quantity:finalquantity}})
+                    .then(responses=>{
+                        res.status(200).send({msg:"success",result:"Successfully updated quantity"})
+                    })
+            })
+        // }
+        
+    }
+
+    async stockOutUpdateQuantity(req,res){
+        // const {id,quantity,productName,originalQuantity}=req.body
+        if(!req.body.id || !req.body.quantity || !req.body.productName || !req.body.originalQuantity){
             res.status(400).send("Bad Request")
         }else{
-            const newStockOut = new StockOut({
-                name:productName,
-                docNo,
-                location:locationId,
-                quantity,
-                date,
-                trainerName,
-                doctorName,
-                unit
+            StockOut.updateOne({_id:mongoose.Types.ObjectId(req.body.id)},{quantity:parseInt(req.body.quantity),
+            prevQuantity:parseInt(req.body.originalQuantity)})
+            .then(response=>{
+                // res.status(200).send({msg:"success",result:response})
+                let finalquantity = parseInt(req.body.originalQuantity) - parseInt(req.body.quantity) //yaha par orginal quantity agar 20 hai aur abhi editing quantity 10 hai to 20-10=10 yani 10 hi quantity stockout hui isiliey 10 add kardo
+                Stock.updateOne({name:req.body.productName},{$inc:{quantity:finalquantity}})
+                .then(responses=>{
+                    res.status(200).send({msg:"success",result:responses})
+                })
             })
-            newStockOut.save()
-            .then(stockoutresponse=>{
-                Stock.findOneAndUpdate({stockId:mongoose.Types.ObjectId(stockId)},{$inc:{quantity:-quantity},$push:{stockOut:stockoutresponse._id}})
-                .then(async stockupdateresponse=>{
-                    console.log(stockupdateresponse)
-                    await StockOut.updateOne({_id:stockoutresponse._id},{$set:{prevQuantity:stockupdateresponse.quantity}})
-                    res.status(200).send({msg:'success',result:'Stock Out Successfull'})
+        }
+        
+    }
+
+    async stockInDelete(req,res){
+        if(!req.body.id || !req.body.quantity || !req.body.productName){
+            res.status(400).send("Bad Request")
+        }else{
+            StockIn.deleteOne({_id:mongoose.Types.ObjectId(req.body.id)})
+            .then(response=>{
+                // res.status(200).send({msg:"success",result:response})
+                Stock.updateOne({name:req.body.productName},{$inc:{quantity:-parseInt(req.body.quantity)}})
+                .then(responses=>{
+                    res.status(200).send({msg:"success",result:responses})
+                })
+            })
+        }
+        
+    }
+    async stockOutDelete(req,res){
+        if(!req.body.id || !req.body.quantity || !req.body.productName){
+            res.status(400).send("Bad Request")
+        }else{
+            StockOut.deleteOne({_id:mongoose.Types.ObjectId(req.body.id)})
+            .then(response=>{
+                // res.status(200).send({msg:"success",result:response})
+                Stock.updateOne({name:req.body.productName},{$inc:{quantity:parseInt(req.body.quantity)}})
+                .then(responses=>{
+                    res.status(200).send({msg:"success",result:responses})
                 })
             })
         }
     }
 
+    async updatestockIn(req,res){
+        try {
+            let {productType,productName,companyName,productId,supplierId,supplierDocNo,quantity,price,expiry,docNo,unit} = req.body;
+            if(!productType||!productName||!companyName||!productId||!supplierId||!supplierDocNo||!quantity||!price||!expiry||!docNo||!unit){
+                res.status(400).send("Bad Request")
+          console.log(req.body)
+            }else{
+                quantity = parseInt(quantity)
+                // price = parseInt(price)
+                price = parseFloat(price)
+                
+                Stock.findOneAndUpdate({name:req.body.productName})
+                .then(async response=>{
+                    const newStockIn = new StockIn({
+                        name:productName,
+                        companyName,
+                        productType,
+                        docNo,
+                        supplierDocNo,
+                        supplier:supplierId,
+                        quantity,
+                        price,
+                        expiry,
+                        unit
+                    },{new: true})
+                    const stockInResponse = await newStockIn.save()
+                    if(response){
+                        //product already exist increase quantity and stock in
+                        Stock.findOneAndUpdate({_id:response._id},{$inc:{quantity:quantity},$push:{stockIn:stockInResponse._id}})
+                        .then(async stockUpdateResponse=>{
+                            console.log(stockUpdateResponse)
+                            await StockIn.updateOne({_id:stockInResponse._id},{$set:{prevQuantity:stockUpdateResponse.quantity}})
+                            res.status(200).send({msg:'success',result:stockInResponse})
+                        })
+                    }else{
+                        //product doesn't exist stock in and create
+                            const newStock = new Stock({
+                                name:productName,
+                                product:mongoose.Types.ObjectId(productId),
+                                quantity,
+                                stockIn:[stockInResponse._id]
+                            })
+                            newStock.save()
+                            .then(newStockResponse=>{
+                                res.status(200).send({msg:'success',result:stockInResponse})
+                            })
+                    }
+                })
+            }
+        } catch (error) {
+            console.log(error)
+        }
+     
+        
+    }
+    // async updatestockIn(req,res){
+    //     let {productType,productName,companyName,quantity,price,expiry,unit} = req.body;
+      
+    //         quantity = parseInt(quantity)
+    //         price = parseInt(price)
+    //         let updateStock;
+    //       updateStock  = await StockIn.findOneAndUpdate(
+          
+    //         { name:  req.params.name},
+            
+    //               {  name:productName,
+    //                 companyName,
+    //                 productType,
+    //                 quantity,
+    //                 price,
+    //                 expiry,
+    //                 unit
+    //             },{new:true})
+    //             // const stockInResponse = await newStockIn.save()
+    //             console.log(updateStock)
+    //             res.json(updateStock)
+         
+        
+        
+    // }
+    // async deleteStockinfo(req, res, next) {
+    //     let product;
+    //     try {
+    //       product = await StockIn.deleteOne({ name: req.params.name });
+    //       if (!product) {
+    //         return next(new Error("Noting to delete"));
+    //       }
+    //     } catch (error) {
+    //       return next(error);
+    //     }
+    //     res.json(product);
+    //   }
+
+    async deleteStockIn(req,res){
+        //stock in ki ID bhejo aur jo stockin ki quantity thi, wo bhi bhejo
+        StockIn.deleteOne({_id:mongoose.Types.ObjectId(req.body.stockInId)})
+        .then(response=>{
+            console.log(response)
+            Stock.findOneAndUpdate({'stockIn':mongoose.Types.ObjectId(req.body.stockInId)},{$inc:{quantity:-req.body.quantity},$pull:{stockIn:mongoose.Types.ObjectId(req.body.stockInId)}})
+            .then(async stockresponse=>{
+                console.log(stockresponse)
+                if(stockresponse.quantity<=0 || stockresponse.quantity===req.body.quantity){
+                    await Stock.deleteOne({_id:stockresponse._id})
+                }
+                res.status(200).send({msg:"success",result:"Successfully Removed StockIn"})
+            })
+        })
+    }
+
+    async stockOut(req,res){
+        let {unit,productName,productId,docNo,locationId,quantity,stockId,date,trainerName,doctorName,locationName}=req.body;
+        // console.log("bodydata",{unit,productName,productId,docNo,locationId,quantity,stockId,date,trainerName,doctorName})
+        if(!unit || !productName||!productId||!docNo||!locationId||!quantity||!date||!trainerName||!doctorName){
+            res.status(400).send("Bad Request")
+        }else{
+            quantity = parseInt(quantity)
+
+            if(!stockId){
+                const newStockOut = new StockOut({
+                    name:productName,
+                    docNo,
+                    location:locationId,
+                    quantity,
+                    date,
+                    trainerName,
+                    doctorName,
+                    unit,
+                    locationName
+                })
+                newStockOut.save()
+                .then(stockoutresponse=>{
+                    const newStock = new Stock({
+                        name:productName,
+                        product:mongoose.Types.ObjectId(productId),
+                        quantity:-quantity,
+                        stockOut:[stockoutresponse._id]
+                    })
+                    newStock.save()
+                    .then(newStockResponse=>{
+                        res.status(200).send({msg:'success',result:stockoutresponse})
+                    })
+                })
+
+            }else{
+                let currentStock = await Stock.findOne({_id:mongoose.Types.ObjectId(stockId)})
+                // console.log(quantity,currentStock.quantity,currentStock)
+                // if(quantity>parseInt(currentStock.quantity)){
+                //     res.status(400).send("Stock out quantity cannot be greater than current stock quantity")
+                // }else{
+                    const newStockOut = new StockOut({
+                        name:productName,
+                        docNo,
+                        location:locationId,
+                        quantity,
+                        date,
+                        trainerName,
+                        doctorName,
+                        unit,
+                        locationName
+                    })
+                    newStockOut.save()
+                    .then(stockoutresponse=>{
+                        Stock.updateOne({_id:mongoose.Types.ObjectId(stockId)},{$inc:{quantity:-quantity},$push:{stockOut:stockoutresponse._id}})
+                        .then(async currentStock=>{
+                            console.log(currentStock)
+                            await StockOut.updateOne({_id:stockoutresponse._id},{$set:{prevQuantity:currentStock.quantity}})
+                            res.status(200).send({msg:'success',result:stockoutresponse})
+                        })
+                    })
+            }
+
+
+            }
+
+//        }
+    }
+    async deleteStockOut(req,res){
+        console.log(req.body)
+        StockOut.deleteOne({_id:mongoose.Types.ObjectId(req.body.stockOutId)})
+        .then(response=>{
+            console.log(response)
+            Stock.findOneAndUpdate({'stockOut':mongoose.Types.ObjectId(req.body.stockOutId)},{$inc:{quantity:req.body.quantity},$pull:{stockOut:mongoose.Types.ObjectId(req.body.stockOutId)}})
+            .then(async stockresponse=>{
+                console.log(stockresponse)
+                if(stockresponse.quantity<=0 || stockresponse.quantity===req.body.quantity){
+                    await Stock.deleteOne({_id:stockresponse._id})
+                }
+                res.status(200).send({msg:"success",result:"Successfully Removed stockOut"})
+            })
+        })
+    } 
+    async getPrevStockInInfo(req,res){
+        if(!req.body.from || !req.body.to || !req.body.productType){
+            res.status(400).send("Bad Request")
+        }else{
+            let d1 = date.parse(req.body.to, 'YYYY/MM/DD');
+            let d2 = date.parse(req.body.from, 'YYYY/MM/DD'); //format - '2023/01/10'
+            console.log(d1)
+            StockIn.find({name:req.body.productType,$and:[{createdAt:{$gt:d1}},{createdAt:{$lt:d2}}]})
+            .then(response=>{
+                res.status(200).send({msg:"success",result:response})
+            })
+        }
+        
+    }
+
     async getStockInDocNo(req,res){
-        StockIn.countDocuments()
+        StockIn.find({},{docNo:1}).sort({createdAt:-1}).limit(1)
         .then(response=>{
             res.status(200).send({msg:'success',result:response})
         })
     }
     async getStockOutDocNo(req,res){
-        StockOut.countDocuments()
+        StockOut.find({},{docNo:1}).sort({createdAt:-1}).limit(1)
         .then(response=>{
             res.status(200).send({msg:'success',result:response})
         })
     }
 
     async getMonthlyReport(req,res){
-        const now = new Date('2023-01-08T13:44:04.338+00:00');
-        //let d1 = date.format('1673169305202', 'YYYY/MM/DD HH:mm:ss');
-        //let d2 = date.format(now, 'YYYY/MM/DD HH:mm:ss');
-        let d1 = date.parse('2023/01/07', 'YYYY/MM/DD');
-        let d2 = date.parse('2023/01/10', 'YYYY/MM/DD');
-        //console.log(d2,d3)
-        StockOut.find({$and:[{createdAt:{$gt:d1}},{createdAt:{$lt:d2}}]})
+        let d1 = date.parse(req.body.from, 'YYYY/MM/DD');
+        let d2 = date.parse(req.body.to, 'YYYY/MM/DD'); //format - '2023/01/10'
+        console.log(d2,d3)
+        StockOut.aggregate([
+            {
+              $match: {
+                $and: [
+                  { createdAt: { $gt: d1 } },
+                  { createdAt: { $lt: d2 } }
+                ]
+              }
+            },
+            {
+              $lookup: {
+                from: "locations",
+                localField: "location",
+                foreignField: "_id",
+                as: "location"
+              }
+            }
+          ])
+        .then(response=>{
+            res.status(200).send({msg:"success",result:response})
+        })
+    }
+//,$and:[{createdAt:{$gt:"2022-11-29T18:30:00.000Z"}},{createdAt:{$lt:"2022-12-31T18:30:00.000Z"}} ]
+    async getStockReport(req,res){
+        let d1 = date.parse(req.body.from, 'YYYY/MM/DD');
+        let d2 = date.parse(req.body.to, 'YYYY/MM/DD'); //format - '2023/01/10'
+        console.log(d1,d2)
+        StockOut.find({location:mongoose.Types.ObjectId(req.body.locationId),trainerName:req.body.trainerName,$and:[{createdAt:{$gt:d1}},{createdAt:{$lt:d2}}]})
         .then(response=>{
             res.status(200).send({msg:"success",result:response})
         })
     }
 
-    async getStockReport(req,res){
-        const now = new Date('2023-01-08T13:44:04.338+00:00');
-        //let d1 = date.format('1673169305202', 'YYYY/MM/DD HH:mm:ss');
-        //let d2 = date.format(now, 'YYYY/MM/DD HH:mm:ss');
-        let d1 = date.parse('2023/01/07', 'YYYY/MM/DD');
-        let d2 = date.parse('2023/01/10', 'YYYY/MM/DD');
-        //console.log(d2,d3)
-        StockOut.find({location:mongoose.Types.ObjectId("63bab677ddbd21fd91263424"),trainerName:"Google Cloud",$and:[{createdAt:{$gt:d1}},{createdAt:{$lt:d2}}]})
+    async getStockAllStockOut(req,res){
+        if(req.body.search){
+            StockOut.find({docNo:req.body.search})
+            .then(response=>{
+                res.status(200).send({msg:"success",result:response})
+            })
+        }else{
+            StockOut.find({})
+            .then(response=>{
+                res.status(200).send({msg:"success",result:response})
+            })
+        }
+    }
+
+    async getDocumentStockOut(req,res){
+        console.log(req.body.docNo)
+        StockOut.aggregate([
+            {
+                $match:req.body.docNo?{docNo:parseInt(req.body.docNo)}:{}
+            },
+            {
+                $sort:{createdAt:-1}
+            },
+            {
+                $group:{
+                _id:{
+                docNo:"$docNo",
+                },
+                trainerName:{$push:"$trainerName"},
+                createdAt:{$push:"$createdAt"}
+                
+            }}  
+        ])
         .then(response=>{
             res.status(200).send({msg:"success",result:response})
         })
+    }
+
+    async getStockDoucments(req,res){
+        console.log(req.body.name)
+        if(!req.body.name){
+            res.status(400).send("Bad Request")
+        }else{
+            let stockout = await StockOut.aggregate([
+                {
+                    $match:{name:req.body.name}
+                },
+                {
+                    $sort:{createdAt:-1}
+                },
+                {
+                    $group:{
+                    _id:{
+                    docNo:"$docNo",
+                    },
+                    // doc:{
+                    //     $push:{
+                    //     name:"$name",
+                    //     // productType:"$vitamin",
+                    //     // supplierDocNo:"$supplierDocNo",
+                    //     quantity:"$quantity",
+                    //     unit:"$unit",
+                    //     doctorName:"$doctorName",
+                    //     trainerName:"$trainerName",
+                    //     prevQuantity:"$prevQuantity",
+                    //     date:"$date",
+                    //     "createdAt":"$createdAt",
+                    //     }
+                    // }
+                    createdAt:{$push:"$createdAt"},
+                    name:{$push:"$name"},
+                    // productType:{$push:"$vitamin"},
+                    // supplierDocNo:{$push:"$supplierDocNo"},
+                    quantity:{$push:"$quantity"},
+                    unit:{$push:"$unit"},
+                    doctorName:{$push:"$doctorName"},
+                    trainerName:{$push:"$trainerName"},
+                    prevQuantity:{$push:"$prevQuantity"},
+                    date:{$push:"$date"},
+                    
+                }}  
+            ])
+            let stockin = await StockIn.aggregate([
+                {
+                    $match:{name:req.body.name}
+                },
+                {
+                    $sort:{createdAt:-1}
+                },
+                {
+                    $group:{
+                        _id:{
+                            docNo:"$docNo",
+                            },
+                            // doc:{
+                            //     $push:{
+                            //     name:"$name",
+                            //     // productType:"$vitamin",
+                            //     // supplierDocNo:"$supplierDocNo",
+                            //     quantity:"$quantity",
+                            //     unit:"$unit",
+                            //     doctorName:"$doctorName",
+                            //     trainerName:"$trainerName",
+                            //     prevQuantity:"$prevQuantity",
+                            //     date:"$date",
+                            //     "createdAt":"$createdAt",
+                            //     }
+                            // }
+                    // _id:{
+                    // docNo:"$docNo",
+                    // },
+                    createdAt:{$push:"$createdAt"},
+                    name:{$push:"$name"},
+                    productType:{$push:"$productType"},
+                    supplierDocNo:{$push:"$supplierDocNo"},
+                    supplier:{$push:"$supplier"},
+                    quantity:{$push:"$quantity"},
+                    unit:{$push:"$unit"},
+                    price:{$push:"$price"},
+                    prevQuantity:{$push:"$prevQuantity"},
+                    expiry:{$push:"$expiry"},
+                    
+                }}  
+            ])
+            res.status(200).send({msg:"success",result:{stockout:stockout,stockin}})
+        }
+    }
+
+    async getStockoutByDocNo(req,res){
+        if(!req.body.docNo){
+            res.status(400).send("Bad Request")
+        }else{
+            let stockout = await StockOut.aggregate([
+                {
+                    $match:{docNo:parseInt(req.body.docNo)}
+                },
+                {
+                    $sort:{createdAt:-1}
+                },
+                {
+                    $group:{
+                        _id:{
+                            docNo:"$docNo",
+                            },
+                            doc:{
+                                $push:{
+                                name:"$name",
+                                _id:"$_id",
+                                // productType:"$vitamin",
+                                // supplierDocNo:"$supplierDocNo",
+                                quantity:"$quantity",
+                                unit:"$unit",
+                                doctorName:"$doctorName",
+                                trainerName:"$trainerName",
+                                prevQuantity:"$prevQuantity",
+                                date:"$date",
+                                "createdAt":"$createdAt",
+                                }
+                            }
+                    // _id:{
+                    // docNo:"$docNo",
+                    // },
+                    // createdAt:{$push:"$createdAt"},
+                    // name:{$push:"$name"},
+                    // // productType:{$push:"$vitamin"},
+                    // // supplierDocNo:{$push:"$supplierDocNo"},
+                    // quantity:{$push:"$quantity"},
+                    // unit:{$push:"$unit"},
+                    // doctorName:{$push:"$doctorName"},
+                    // trainerName:{$push:"$trainerName"},
+                    // prevQuantity:{$push:"$prevQuantity"},
+                    // date:{$push:"$date"},
+                    
+                }}  
+            ])
+            res.status(200).send({msg:"success",result:stockout})
+        }
+
+    }
+    async getStockInByDocNo(req,res){
+        if(!req.body.docNo){
+            res.status(400).send("Bad Request")
+        }else{
+            let stockin = await StockIn.aggregate([
+                {
+                    $match:{docNo:parseInt(req.body.docNo)}
+                },
+                {
+                    $sort:{createdAt:-1}
+                },
+                {
+                    $group:{
+                        _id:{
+                            docNo:"$docNo",
+                            },
+                            doc:{
+                                $push:{
+                                _id:"$_id",
+                                name:"$name",
+                                // supplier:"$supplier.name",
+                                // productType:"$vitamin",
+                                // supplierDocNo:"$supplierDocNo",
+                                quantity:"$quantity",
+                                unit:"$unit",
+                                companyName:"$companyName",
+                                productType:"$productType",
+                                price:"$price",
+                                prevQuantity:"$prevQuantity",
+                                expiry:"$expiry",
+                                "createdAt":"$createdAt",
+                                }
+                            }
+                    // _id:{
+                    // docNo:"$docNo",
+                    // },
+                    // createdAt:{$push:"$createdAt"},
+                    // name:{$push:"$name"},
+                    // productType:{$push:"$productType"},
+                    // supplierDocNo:{$push:"$supplierDocNo"},
+                    // supplier:{$push:"$supplier"},
+                    // quantity:{$push:"$quantity"},
+                    // unit:{$push:"$unit"},
+                    // price:{$push:"$price"},
+                    // prevQuantity:{$push:"$prevQuantity"},
+                    // expiry:{$push:"$expiry"},
+                    
+                }} 
+            ])
+            res.status(200).send({msg:"success",result:stockin})
+        }
+
     }
 
     async currentStockList(req,res){
@@ -181,6 +676,74 @@ class ProductController{
     //     foreignField:"_id",
     //     as:"favbooks"
     // }
+
+    async stockOuts(req, res) {
+        const stockOuts = req.body.stockOuts;
+        let stockOutResponse = {}
+        const allStockOuts = []
+        for (let i = 0; i < stockOuts.length; i++) {
+          const { unit, productName, productId, docNo, locationId, quantity, stockId, date, trainerName, doctorName,locationName } = stockOuts[i];
+          
+          if(!unit || !productName || !productId || !docNo || !locationId || !quantity || !date || !trainerName || !doctorName ) {
+            res.status(400).send("Bad Request");
+            return;
+          }
+          
+          const parsedQuantity = parseInt(quantity);
+      
+          if(!stockId) {
+            const newStockOut = new StockOut({
+              name: productName,
+              docNo,
+              location: locationId,
+              quantity: parsedQuantity,
+              date,
+              trainerName,
+              doctorName,
+              unit,
+              locationName
+            });
+  
+            stockOutResponse = await newStockOut.save();
+      
+            const newStock = new Stock({
+              name: productName,
+              product: mongoose.Types.ObjectId(productId),
+              quantity: -parsedQuantity,
+              stockOut: [stockOutResponse._id]
+            });
+      
+            await newStock.save();
+      
+          } else {
+            let currentStock = await Stock.findOne({ _id: mongoose.Types.ObjectId(stockId) });
+      
+            const newStockOut = new StockOut({
+              name: productName,
+              docNo,
+              location: locationId,
+              quantity: parsedQuantity,
+              date,
+              trainerName,
+              doctorName,
+              unit,
+              locationName
+            });
+      
+            stockOutResponse = await newStockOut.save();
+      
+            await Stock.updateOne({ _id: mongoose.Types.ObjectId(stockId) }, { $inc: { quantity: -parsedQuantity }, $push: { stockOut: stockOutResponse._id } });
+      
+            await StockOut.updateOne({ _id: stockOutResponse._id }, { $set: { prevQuantity: currentStock.quantity } });
+      
+            
+          }
+          allStockOuts.push(stockOutResponse)
+        }
+        res.status(200).send({ msg: 'success', result: allStockOuts });
+
+      }
+      
 
 }
 

@@ -16,7 +16,7 @@ class SupplierController{
             })
             newSupplier.save()
             .then(response=>{
-                res.status(400).send({msg:"success",result:response})
+                res.status(200).send({msg:"success",result:response})
             })
             
         }
@@ -28,7 +28,22 @@ class SupplierController{
             res.status(200).send({msg:"success",result:response})
         })
     }
-
+    async deleteSuppliers(req,res){
+        let {array} = req.body;
+        if(!req.body.array){
+            res.status(400).send("Data Missing")
+        }else{
+            array = array.map(item=>mongoose.Types.ObjectId(item))
+            Supplier.deleteMany({_id: { $in: array}})
+            .then(response=>{
+                if(response.deletedCount===1){
+                    res.status(200).send({msg:"success",result:"Deleted"})
+                }else{
+                    res.status(400).send("Not deleted")
+                }
+            })
+        }
+    }
 
 }
 

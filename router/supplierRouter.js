@@ -6,5 +6,6 @@ const isUserAuth = require("../middlewares/isUserAuth")
 
 router.get('/getAllSuppliers',supplierController.getAllSuppliers)
 router.post('/createSupplier',isAdminAuth,supplierController.createSupplier)
+router.post('/deleteSuppliers',isAdminAuth,supplierController.deleteSuppliers)
 
 module.exports=router;
